@@ -1,10 +1,29 @@
 # Chronos Atelier — Full-Stack 3D Appointment & Booking Scheduler
 
+[![Node.js](https://img.shields.io/badge/Node.js-20.x-green.svg)](https://nodejs.org)
+[![Express](https://img.shields.io/badge/Express-4.x-black.svg)](https://expressjs.com)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Atlas%20%2B%20Mongoose-brightgreen.svg)](https://www.mongodb.com)
+[![React](https://img.shields.io/badge/React-18-blue.svg)](https://react.dev)
+[![Three.js](https://img.shields.io/badge/3D-React%20Three%20Fiber-darkblue.svg)](https://docs.pmnd.rs/react-three-fiber)
+[![Docker](https://img.shields.io/badge/Docker-Compose%20Ready-2496ED.svg)](https://www.docker.com)
+[![AWS](https://img.shields.io/badge/Deploy-AWS%20EC2%20%2F%20ECS-FF9900.svg)](https://aws.amazon.com)
+
 A production-ready full-stack appointment and client scheduling application designed for modern clinics, salons, and studios. Pairs a scroll-choreographed **React Three Fiber** 3D booking landing experience with a zero-lag **Bento-grid Admin Workspace**, **Express + MongoDB Atlas** REST API (with overlap double-booking protection), **Docker Compose**, and **AWS** deployment guides.
 
 ---
 
-## Architecture Overview
+## 🌟 Key Features
+
+- **Choreographed 3D Canvas Hero**: Built with React Three Fiber (`@react-three/fiber` & `@react-three/drei`) featuring a smooth interactive 3D studio model that responds to cursor parallax and scroll depth.
+- **Bento-Grid Administrative Workspace**: High-efficiency management dashboard with real-time statistics (today's bookings, revenue metrics, active clients), full-text search, and category filtering.
+- **Conflict-Free Appointment Scheduling**: Automated overlap detection engine that queries staff schedules and rejects double-bookings with an HTTP `409 Conflict` before saving.
+- **Client & Service Directory**: Comprehensive CRUD management for clinic/salon service offerings (durations, pricing, category) and client history records.
+- **Containerized Architecture**: Multi-stage production `Dockerfile`s for both frontend (Vite &rarr; Alpine Nginx reverse proxy) and backend (Node.js 20 Alpine) orchestrated via `docker-compose.yml`.
+- **Cloud-Ready Deployment**: Includes automated shell scripts and step-by-step guides for AWS EC2, AWS ECS Fargate, ALB target groups, and SSL termination.
+
+---
+
+## 🏗️ Architecture & Project Structure
 
 ```text
 appointment-booking-scheduler/
@@ -40,13 +59,84 @@ appointment-booking-scheduler/
 
 ---
 
-## Quick Start (Local Development)
+## 🗄️ Database Models & Overlap Prevention
+
+```mermaid
+erDiagram
+    CLIENTS ||--o{ APPOINTMENTS : books
+    SERVICES ||--o{ APPOINTMENTS : includes
+    
+    CLIENTS {
+        ObjectId _id PK
+        string fullName
+        string email UK
+        string phone
+        string notes
+        datetime createdAt
+    }
+
+    SERVICES {
+        ObjectId _id PK
+        string name
+        string category
+        int durationMinutes
+        float price
+        boolean isActive
+    }
+
+    APPOINTMENTS {
+        ObjectId _id PK
+        ObjectId clientId FK
+        ObjectId serviceId FK
+        string staffName
+        datetime startTime
+        datetime endTime
+        string status
+        float totalAmount
+        string notes
+    }
+```
+
+### Overlap Detection Query (MongoDB):
+Before saving a new appointment for a staff member, the API queries:
+```javascript
+const conflict = await Appointment.findOne({
+  staffName,
+  status: { $ne: 'Cancelled' },
+  $or: [
+    { startTime: { $lt: reqEndTime }, endTime: { $gt: reqStartTime } }
+  ]
+});
+if (conflict) {
+  return res.status(409).json({ error: 'Staff member is already booked during this time slot.' });
+}
+```
+
+---
+
+## 🚀 API Reference
+
+| Endpoint | Methods | Notes |
+| :--- | :--- | :--- |
+| `/api/health` | `GET` | Returns `200 OK` when MongoDB is connected, `503` otherwise |
+| `/api/services` | `GET`, `POST` | Supports `?activeOnly=true` and `?category=` |
+| `/api/services/:id` | `GET`, `PUT`, `DELETE` | Full CRUD for service offerings |
+| `/api/clients` | `GET`, `POST` | Supports `?search=` matching fullName, email, or phone |
+| `/api/clients/:id` | `GET`, `PUT`, `DELETE` | Full CRUD for client directory |
+| `/api/appointments` | `GET`, `POST` | Filters: `?date=YYYY-MM-DD`, `?status=`, `?staffName=`, `?clientId=` |
+| `/api/appointments/:id` | `GET`, `PUT`, `DELETE` | Auto-calculates `endTime`; returns `409 Conflict` on staff time overlap |
+| `/api/appointments/:id/status` | `PATCH` | Fast status update (`Scheduled`, `Completed`, `Cancelled`, `No-Show`) |
+| `/api/dashboard/stats` | `GET` | Today's count, status totals, total clients, estimated revenue |
+
+---
+
+## 💻 Quick Start (Local Development)
 
 ### 1. Environment Variables
 ```bash
 cp .env.example .env
-# Edit .env with your MongoDB Atlas connection string:
-# MONGODB_URI=mongodb+srv://<user>:<password>@cluster.mongodb.net/booking_scheduler?retryWrites=true&w=majority
+# Edit .env with your MongoDB connection string (or local MongoDB):
+# MONGODB_URI=mongodb://localhost:27017/booking_scheduler
 ```
 
 ### 2. Backend Setup & Seed
@@ -66,11 +156,9 @@ npm run dev     # Starts Vite dev server on http://localhost:5173 (proxies /api 
 
 ---
 
-## Docker Compose (Single-Command Run)
+## 🐳 Docker Compose (Single-Command Run)
 
 ```bash
-cp .env.example .env
-# Set your MONGODB_URI inside .env
 docker compose up --build -d
 ```
 
@@ -79,101 +167,44 @@ docker compose up --build -d
 
 ---
 
-## API Reference
-
-| Endpoint | Methods | Notes |
-| :--- | :--- | :--- |
-| `/api/health` | `GET` | Returns `200 OK` when MongoDB is connected, `503` otherwise |
-| `/api/services` | `GET`, `POST` | Supports `?activeOnly=true` and `?category=` |
-| `/api/services/:id` | `GET`, `PUT`, `DELETE` | Full CRUD for service offerings |
-| `/api/clients` | `GET`, `POST` | Supports `?search=` matching fullName, email, or phone |
-| `/api/clients/:id` | `GET`, `PUT`, `DELETE` | Full CRUD for client directory |
-| `/api/appointments` | `GET`, `POST` | Filters: `?date=YYYY-MM-DD`, `?status=`, `?staffName=`, `?clientId=` |
-| `/api/appointments/:id` | `GET`, `PUT`, `DELETE` | Auto-calculates `endTime`; returns `409 Conflict` on staff time overlap |
-| `/api/appointments/:id/status` | `PATCH` | Fast status update (`Scheduled`, `Completed`, `Cancelled`, `No-Show`) |
-| `/api/dashboard/stats` | `GET` | Today's count, status totals, total clients, estimated revenue |
-
----
-
-## AWS Deployment Guide
+## ☁️ AWS Deployment Guide
 
 ### Option A: AWS EC2 (Ubuntu 24.04 LTS) + Docker Compose
 
 1. **Launch EC2 Instance**:
-   - AMI: **Ubuntu Server 24.04 LTS (HVM)** (`t3.small` or `t3.medium` recommended).
+   - AMI: **Ubuntu Server 24.04 LTS (HVM)** (`t3.small` or `t3.medium`).
    - Storage: `20 GB gp3` EBS volume.
    - Allocate an **Elastic IP** and associate it with your EC2 instance.
 2. **Configure EC2 Security Group (Inbound Rules)**:
-   - `SSH (TCP 22)` → Your trusted office/home IP only
-   - `HTTP (TCP 80)` → `0.0.0.0/0`
-   - `HTTPS (TCP 443)` → `0.0.0.0/0`
+   - `SSH (TCP 22)` &rarr; Your trusted IP only
+   - `HTTP (TCP 80)` &rarr; `0.0.0.0/0`
+   - `HTTPS (TCP 443)` &rarr; `0.0.0.0/0`
 3. **Whitelist EC2 Elastic IP in MongoDB Atlas**:
-   - In **MongoDB Atlas → Network Access → Add IP Address**, enter `<YOUR_EC2_ELASTIC_IP>/32`.
-   - Confirm your Atlas database user has `readWrite` permissions on the `booking_scheduler` database.
+   - In **MongoDB Atlas &rarr; Network Access &rarr; Add IP Address**, enter `<YOUR_EC2_ELASTIC_IP>/32`.
 4. **Deploy Application via `deploy-aws.sh`**:
    ```bash
    ssh -i your-key.pem ubuntu@<YOUR_EC2_ELASTIC_IP>
-   git clone <your-repo-url> appointment-booking-scheduler
+   git clone https://github.com/siddiquddin/appointment-booking-scheduler.git
    cd appointment-booking-scheduler
    cp .env.example .env
-   nano .env   # Set MONGODB_URI and CORS_ORIGIN=https://yourdomain.com
+   nano .env   # Set MONGODB_URI
    chmod +x deploy-aws.sh
    ./deploy-aws.sh
    ```
-5. **Seed Initial Data (Optional)**:
-   ```bash
-   docker compose exec backend npm run seed
-   ```
 
 ---
 
-### Option B: AWS ECR + AWS ECS (Fargate) + Application Load Balancer
+## 🎤 Interview Talking Points & Technical Highlights
 
-1. **Create Two ECR Repositories**:
-   ```bash
-   aws ecr create-repository --repository-name scheduler-backend --region us-east-1
-   aws ecr create-repository --repository-name scheduler-frontend --region us-east-1
-   ```
-2. **Authenticate, Build & Push Images**:
-   ```bash
-   ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-   REGION=us-east-1
-   aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
-
-   docker build -t $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/scheduler-backend:latest ./backend
-   docker push $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/scheduler-backend:latest
-
-   docker build -t $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/scheduler-frontend:latest \
-     --build-arg VITE_API_BASE_URL=/api ./frontend
-   docker push $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/scheduler-frontend:latest
-   ```
-3. **Configure ECS Fargate Task Definition**:
-   - Container 1 (`backend`): Port `5000`, inject `MONGODB_URI` via **AWS Secrets Manager**, set `CORS_ORIGIN`.
-   - Container 2 (`frontend`): Port `80`, update `nginx.conf` upstream `http://127.0.0.1:5000/api/` if running both containers in the same Fargate task (`awsvpc` localhost), or route `/api/*` via ALB path rules to a separate backend target group.
-4. **Application Load Balancer (ALB) Target Group Health Checks**:
-   - Backend target group health check path: **`/api/health`** (`200` matcher, interval `30s`).
-   - Frontend target group health check path: **`/`**.
-5. **MongoDB Atlas Access**:
-   - Attach an **AWS NAT Gateway Elastic IP** (if tasks run in private subnets) and whitelist that NAT Elastic IP in **MongoDB Atlas Network Access**, or enable **MongoDB Atlas AWS PrivateLink**.
+1. **Staff Schedule Conflict Algorithm**:
+   *"To prevent staff double-booking, the API treats appointment windows as time intervals and performs a range-overlap check `(startA < endB && endA > startB)`. If any active booking intersects the requested slot, it throws a 409 Conflict."*
+2. **Full-Stack Performance & 3D Optimization**:
+   *"For the 3D canvas hero, I used `@react-three/fiber` with lazy loading and low polygon counts to ensure 60fps rendering without blocking the DOM or inflating initial bundle size."*
+3. **Multi-Stage Docker Builds**:
+   *"The frontend Dockerfile utilizes a multi-stage build: Stage 1 builds the production static assets with Vite, and Stage 2 serves them using a lean Alpine Nginx container. This minimizes image size from 500MB+ down to ~25MB."*
 
 ---
 
-### Option C: SSL / HTTPS Setup
+## 📄 License
 
-#### On EC2 with Let's Encrypt (Certbot + Nginx)
-1. Point your domain's `A` record (`booking.yourdomain.com`) to your EC2 Elastic IP.
-2. Install Certbot on the host (or terminate SSL on a host-level Nginx proxy forwarding to `http://127.0.0.1:80`):
-   ```bash
-   sudo apt-get install -y nginx certbot python3-certbot-nginx
-   sudo certbot --nginx -d booking.yourdomain.com
-   ```
-3. Update `.env`:
-   ```env
-   CORS_ORIGIN=https://booking.yourdomain.com
-   ```
-   Then restart: `docker compose up -d --force-recreate backend`.
-
-#### On ECS + ALB with AWS Certificate Manager (ACM)
-1. Request a public TLS certificate in **AWS Certificate Manager (ACM)** for `booking.yourdomain.com` and complete DNS validation via Route 53.
-2. Add an **HTTPS:443 Listener** to the ALB attaching your ACM certificate, forwarding to your target groups.
-3. Add an HTTP:80 → HTTPS:443 `301` redirect rule on the ALB.
+This project is licensed under the MIT License.
